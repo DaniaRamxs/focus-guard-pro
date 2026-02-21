@@ -1,18 +1,28 @@
 /**
  * Orquestador principal de FocusGuard Pro
  */
+window.onerror = function (msg, url, lineNo, columnNo, error) {
+    alert(`DEBUG ERROR:\nMsg: ${msg}\nLine: ${lineNo}\nUrl: ${url}`);
+    return false;
+};
+
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("DOM loaded. Initializing application dependencies...");
+    console.log("--- FocusGuard Pro: Entorno de Inicialización ---");
 
-    if (typeof Chart === 'undefined') {
-        console.error("Chart.js is not loaded!");
-        alert("Error: Chart.js no se cargó correctamente.");
-        return;
-    }
+    const dependencies = {
+        'Chart.js': typeof Chart !== 'undefined',
+        'FaceMesh': typeof FaceMesh !== 'undefined',
+        'Camera': typeof Camera !== 'undefined',
+        'DrawingUtils': typeof drawConnectors !== 'undefined'
+    };
 
-    if (typeof FaceMesh === 'undefined') {
-        console.error("MediaPipe FaceMesh is not loaded!");
-        alert("Error: MediaPipe FaceMesh no se cargó correctamente.");
+    console.table(dependencies);
+
+    const missing = Object.keys(dependencies).filter(k => !dependencies[k]);
+    if (missing.length > 0) {
+        const msg = `Error: Las siguientes dependencias no se cargaron: ${missing.join(', ')}`;
+        console.error(msg);
+        alert(msg);
         return;
     }
 
