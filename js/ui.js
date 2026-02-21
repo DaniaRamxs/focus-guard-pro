@@ -39,28 +39,42 @@ class UIController {
         this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
 
-    startAlarm() {
-        if (!this.audioCtx || this.alarmOsc) return;
+    async startAlarm() {
+        if (!this.audioCtx) return;
+        if (this.audioCtx.state === 'suspended') await this.audioCtx.resume();
+        if (this.alarmOsc) return;
 
         this.alarmOsc = this.audioCtx.createOscillator();
-        const gainNode = this.audioCtx.createGain();
+        this.alarmGain = this.audioCtx.createGain();
 
-        this.alarmOsc.type = 'sawtooth'; // Sonido agresivo para despertar
-        this.alarmOsc.frequency.setValueAtTime(880, this.audioCtx.currentTime); // Nota La5
+        this.alarmOsc.type = 'sawtooth';
+        this.alarmOsc.frequency.setValueAtTime(880, this.audioCtx.currentTime);
 
-        // Efecto de pitido intermitente (beeping)
-        gainNode.gain.setValueAtTime(0.1, this.audioCtx.currentTime);
+        // Crear efecto de pitido (beeping)
+        const now = this.audioCtx.currentTime;
+        this.alarmGain.gain.setValueAtTime(0, now);
 
-        this.alarmOsc.connect(gainNode);
-        gainNode.connect(this.audioCtx.destination);
+        // Oscilación de volumen: 0.2s encendido, 0.2s apagado
+        const beepInterval = 0.4;
+        for (let i = 0; i < 100; i++) {
+            const startTime = now + (i * beepInterval);
+            this.alarmGain.gain.setValueAtTime(0.2, startTime);
+            this.alarmGain.gain.setValueAtTime(0, startTime + 0.2);
+        }
+
+        this.alarmOsc.connect(this.alarmGain);
+        this.alarmGain.connect(this.audioCtx.destination);
         this.alarmOsc.start();
     }
 
     stopAlarm() {
         if (this.alarmOsc) {
-            this.alarmOsc.stop();
-            this.alarmOsc.disconnect();
+            try {
+                this.alarmOsc.stop();
+                this.alarmOsc.disconnect();
+            } catch (e) { }
             this.alarmOsc = null;
+            this.alarmGain = null;
         }
     }
 

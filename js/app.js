@@ -44,6 +44,14 @@ function startApp() {
                 gaze: FaceAnalyzer.estimateGaze(landmarks, CONFIG.LANDMARKS.LEFT_EYE, CONFIG.LANDMARKS.LEFT_IRIS)
             });
 
+            if (currentMetrics.isSleeping && !this.wasSleeping) {
+                logDebug("⚠️ DETECCIÓN DE SUEÑO ACTIVA");
+                this.wasSleeping = true;
+            } else if (!currentMetrics.isSleeping && this.wasSleeping) {
+                logDebug("✅ Usuario despierto.");
+                this.wasSleeping = false;
+            }
+
             drawResults(results, currentMetrics);
             ui.updateDashboard(currentMetrics, {
                 ear: currentMetrics.blinkRate,
