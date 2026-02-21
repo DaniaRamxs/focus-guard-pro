@@ -2,6 +2,20 @@
  * Orquestador principal de FocusGuard Pro
  */
 document.addEventListener('DOMContentLoaded', () => {
+    console.log("DOM loaded. Initializing application dependencies...");
+
+    if (typeof Chart === 'undefined') {
+        console.error("Chart.js is not loaded!");
+        alert("Error: Chart.js no se cargó correctamente.");
+        return;
+    }
+
+    if (typeof FaceMesh === 'undefined') {
+        console.error("MediaPipe FaceMesh is not loaded!");
+        alert("Error: MediaPipe FaceMesh no se cargó correctamente.");
+        return;
+    }
+
     const ui = new UIController();
     const metrics = new MetricsEngine();
     const pomodoro = new PomodoroTimer(
@@ -58,22 +72,31 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Vinculación de Eventos ---
 
     const setupForm = document.getElementById('session-setup-form');
+    if (!setupForm) {
+        console.error("Critical: session-setup-form not found!");
+        return;
+    }
+
     setupForm.addEventListener('submit', async (e) => {
+        console.log("Form submit triggered");
         e.preventDefault();
 
         const name = document.getElementById('user-name').value;
         const subject = document.getElementById('session-subject').value;
-        const duration = parseInt(document.getElementById('session-duration').value);
+        const duration = parseInt(document.getElementById('session-duration').value) || 25;
 
         ui.showToast(`Iniciando sesión para ${name}...`);
         ui.initAudio();
 
         try {
+            console.log("Starting FaceAnalyzer...");
             const videoElement = document.getElementById('camera-view');
             await faceAnalyzer.start(videoElement);
+            console.log("FaceAnalyzer started successfully");
 
             ui.showScreen('dashboard-screen');
-            document.getElementById('current-subject').textContent = `MATERIA: ${subject.toUpperCase()}`;
+            const subElem = document.getElementById('current-subject');
+            if (subElem) subElem.textContent = `MATERIA: ${subject.toUpperCase()}`;
 
             sessionStartTime = Date.now();
             sessionSeconds = 0;
@@ -86,8 +109,9 @@ document.addEventListener('DOMContentLoaded', () => {
             pomodoro.start(duration);
 
         } catch (err) {
-            console.error(err);
-            ui.showToast("Error al acceder a la cámara. Verifica los permisos.", "warning");
+            console.error("Error during session start:", err);
+            ui.showToast("Error al acceder a la cámara o inicializar IA. Verifica los permisos.", "warning");
+            alert("Error: " + err.message);
         }
     });
 
