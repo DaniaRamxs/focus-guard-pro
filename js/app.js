@@ -1,11 +1,6 @@
 /**
  * Orquestador principal de FocusGuard Pro
  */
-window.onerror = function (msg, url, lineNo, columnNo, error) {
-    alert(`DEBUG ERROR:\nMsg: ${msg}\nLine: ${lineNo}\nUrl: ${url}`);
-    return false;
-};
-
 document.addEventListener('DOMContentLoaded', () => {
     console.log("--- FocusGuard Pro: Entorno de Inicialización ---");
 
@@ -80,50 +75,58 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- Vinculación de Eventos ---
-
+    const startBtn = document.getElementById('start-session-btn');
     const setupForm = document.getElementById('session-setup-form');
-    if (!setupForm) {
-        console.error("Critical: session-setup-form not found!");
-        return;
+
+    if (startBtn && setupForm) {
+        startBtn.addEventListener('click', async () => {
+            console.log("Manual Start Button clicked");
+
+            // Validación manual de campos requeridos
+            if (!setupForm.reportValidity()) {
+                console.log("Form validation failed");
+                return;
+            }
+
+            const name = document.getElementById('user-name').value;
+            const subject = document.getElementById('session-subject').value;
+            const durationInput = document.getElementById('session-duration');
+            const duration = durationInput ? (parseInt(durationInput.value) || 25) : 25;
+
+            ui.showToast(`Iniciando sesión para ${name}...`);
+            ui.initAudio();
+
+            try {
+                console.log("Starting FaceAnalyzer...");
+                const videoElement = document.getElementById('camera-view');
+                if (!videoElement) throw new Error("Video element (camera-view) not found");
+
+                await faceAnalyzer.start(videoElement);
+                console.log("FaceAnalyzer started successfully");
+
+                ui.showScreen('dashboard-screen');
+                const subElem = document.getElementById('current-subject');
+                if (subElem) subElem.textContent = `MATERIA: ${subject.toUpperCase()}`;
+
+                sessionStartTime = Date.now();
+                sessionSeconds = 0;
+                sessionInterval = setInterval(() => {
+                    sessionSeconds++;
+                    ui.updateSessionClock(sessionSeconds);
+                    if (!isPrivateMode) updateAIRecommendation(metrics.currentMetrics);
+                }, 1000);
+
+                pomodoro.start(duration);
+
+            } catch (err) {
+                console.error("Error during session start:", err);
+                ui.showToast("Error al acceder a la cámara o inicializar IA. Verifica los permisos.", "warning");
+                alert("SISTEMA ERROR (Cámara/IA):\n" + err.message);
+            }
+        });
+    } else {
+        console.error("Critical: Start button or Setup form not found!");
     }
-
-    setupForm.addEventListener('submit', async (e) => {
-        console.log("Form submit triggered");
-        e.preventDefault();
-
-        const name = document.getElementById('user-name').value;
-        const subject = document.getElementById('session-subject').value;
-        const duration = parseInt(document.getElementById('session-duration').value) || 25;
-
-        ui.showToast(`Iniciando sesión para ${name}...`);
-        ui.initAudio();
-
-        try {
-            console.log("Starting FaceAnalyzer...");
-            const videoElement = document.getElementById('camera-view');
-            await faceAnalyzer.start(videoElement);
-            console.log("FaceAnalyzer started successfully");
-
-            ui.showScreen('dashboard-screen');
-            const subElem = document.getElementById('current-subject');
-            if (subElem) subElem.textContent = `MATERIA: ${subject.toUpperCase()}`;
-
-            sessionStartTime = Date.now();
-            sessionSeconds = 0;
-            sessionInterval = setInterval(() => {
-                sessionSeconds++;
-                ui.updateSessionClock(sessionSeconds);
-                if (!isPrivateMode) updateAIRecommendation(metrics.currentMetrics);
-            }, 1000);
-
-            pomodoro.start(duration);
-
-        } catch (err) {
-            console.error("Error during session start:", err);
-            ui.showToast("Error al acceder a la cámara o inicializar IA. Verifica los permisos.", "warning");
-            alert("Error: " + err.message);
-        }
-    });
 
     document.getElementById('timer-toggle-btn').addEventListener('click', () => {
         pomodoro.toggle();

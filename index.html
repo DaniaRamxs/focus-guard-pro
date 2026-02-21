@@ -13,6 +13,14 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script>
+        // Rastreador de errores temprano
+        window.onerror = function (msg, url, lineNo, columnNo, error) {
+            alert(`SISTEMA ERROR:\n${msg}\nLínea: ${lineNo}\nArchivo: ${url}`);
+            return false;
+        };
+    </script>
 </head>
 
 <body>
@@ -47,7 +55,7 @@
                             <input type="number" id="session-duration" class="input-control" value="25" min="1"
                                 max="120">
                         </div>
-                        <button type="submit" class="btn-primary">Iniciar Misión</button>
+                        <button type="button" id="start-session-btn" class="btn-primary">Iniciar Misión</button>
                     </form>
                     <div style="display: flex; justify-content: center; gap: 1rem; margin-top: 1.5rem;">
                         <button id="view-history-btn" class="glass-panel"
