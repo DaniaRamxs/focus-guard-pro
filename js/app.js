@@ -1,15 +1,25 @@
 /**
  * Orquestador principal de FocusGuard Pro
  */
+console.log("Script app.js cargado.");
+
+// Publicar para debug en consola si es necesario
+window.DEBUG_APP = {
+    initialized: false,
+    startAttempted: false
+};
+
 function startApp() {
-    console.log("--- FocusGuard Pro: Entorno de Inicialización ---");
-    // alert("SISTEMA: Iniciando aplicación...");
+    console.log("Iniciando startApp()...");
+    window.DEBUG_APP.initialized = true;
+
+    // Alerta de confirmación de carga (Bootstrap)
+    // alert("SISTEMA: FocusGuard listo. Si no ves esto al cargar, borra caché.");
 
     const dependencies = {
-        'Chart.js': typeof Chart !== 'undefined',
+        'Chart': typeof Chart !== 'undefined',
         'FaceMesh': typeof FaceMesh !== 'undefined',
-        'Camera': typeof Camera !== 'undefined',
-        'DrawingUtils': typeof drawConnectors !== 'undefined'
+        'Camera': typeof Camera !== 'undefined'
     };
 
     console.table(dependencies);
@@ -25,13 +35,8 @@ function startApp() {
     const ui = new UIController();
     const metrics = new MetricsEngine();
     const pomodoro = new PomodoroTimer(
-        (time, mode) => {
-            ui.updateTimer(pomodoro.formatTime(time));
-            if (time === 0) ui.showToast(`¡Tiempo de ${mode === 'WORK' ? 'TRABAJO' : 'DESCANSO'} finalizado!`, 'warning');
-        },
-        (mode) => {
-            console.log("Ciclo completado:", mode);
-        }
+        (t) => ui.updateTimer(pomodoro.formatTime(t)),
+        (m) => console.log("Finalizado:", m)
     );
 
     let sessionStartTime = null;
@@ -49,15 +54,17 @@ function startApp() {
             return;
         }
         ui.setVisionAlert('no-face', false);
-        const landmarks = results.multiFaceLandmarks[0];
-        const earL = FaceAnalyzer.calculateEAR(landmarks, CONFIG.LANDMARKS.LEFT_EYE);
-        const earR = FaceAnalyzer.calculateEAR(landmarks, CONFIG.LANDMARKS.RIGHT_EYE);
-        const ear = (earL + earR) / 2;
-        const pose = FaceAnalyzer.estimateHeadPose(landmarks);
-        const gaze = FaceAnalyzer.estimateGaze(landmarks, CONFIG.LANDMARKS.LEFT_EYE, CONFIG.LANDMARKS.LEFT_IRIS);
-        const currentMetrics = metrics.update(results, { ear, pose, gaze });
+        const currentMetrics = metrics.update(results, {
+            ear: (FaceAnalyzer.calculateEAR(results.multiFaceLandmarks[0], CONFIG.LANDMARKS.LEFT_EYE) +
+                FaceAnalyzer.calculateEAR(results.multiFaceLandmarks[0], CONFIG.LANDMARKS.RIGHT_EYE)) / 2,
+            pose: FaceAnalyzer.estimateHeadPose(results.multiFaceLandmarks[0]),
+            gaze: FaceAnalyzer.estimateGaze(results.multiFaceLandmarks[0], CONFIG.LANDMARKS.LEFT_EYE, CONFIG.LANDMARKS.LEFT_IRIS)
+        });
         drawResults(results, currentMetrics);
-        ui.updateDashboard(currentMetrics, { ear, pose, gaze });
+        ui.updateDashboard(currentMetrics, {
+            ear: currentMetrics.blinkRate,
+            pose: FaceAnalyzer.estimateHeadPose(results.multiFaceLandmarks[0])
+        });
         ui.setVisionAlert('sleep', currentMetrics.isSleeping);
         handleAlerts(currentMetrics);
     });
@@ -67,117 +74,79 @@ function startApp() {
     const startBtn = document.getElementById('start-session-btn');
     const setupForm = document.getElementById('session-setup-form');
 
-    if (startBtn && setupForm) {
-        console.log("Start button and form found, adding listener.");
+    if (startBtn) {
         startBtn.onclick = async () => {
-            console.log("--- BOTÓN CLICK DETECTADO ---");
-            alert("SISTEMA: Click detectado. Procesando...");
+            window.DEBUG_APP.startAttempted = true;
+            console.log("Click en el botón detectado.");
+            alert("PROCEDIENDO: Iniciando cámara y sesión...");
 
-            const isValid = setupForm.reportValidity();
-            if (!isValid) {
-                alert("Por favor, completa tu nombre y selecciona una materia antes de iniciar.");
+            if (!setupForm.reportValidity()) {
+                alert("Completa los datos requeridos.");
                 return;
             }
 
             const name = document.getElementById('user-name').value;
             const subject = document.getElementById('session-subject').value;
-            const durationInput = document.getElementById('session-duration');
-            const duration = durationInput ? (parseInt(durationInput.value) || 25) : 25;
+            const duration = parseInt(document.getElementById('session-duration').value) || 25;
 
             ui.showToast(`Iniciando misión para ${name}...`);
             ui.initAudio();
 
             try {
                 ui.showScreen('dashboard-screen');
-                const subElem = document.getElementById('current-subject');
-                if (subElem) subElem.textContent = `MATERIA: ${subject.toUpperCase()}`;
+                document.getElementById('current-subject').textContent = `MATERIA: ${subject.toUpperCase()}`;
 
-                console.log("Iniciando cámara...");
+                console.log("Llamando a faceAnalyzer.start()...");
                 await faceAnalyzer.start(document.getElementById('camera-view'));
 
-                sessionStartTime = Date.now();
                 sessionSeconds = 0;
                 sessionInterval = setInterval(() => {
                     sessionSeconds++;
                     ui.updateSessionClock(sessionSeconds);
-                    if (!isPrivateMode) updateAIRecommendation(metrics.currentMetrics);
                 }, 1000);
-
                 pomodoro.start(duration);
             } catch (err) {
-                console.error("ERROR CRÍTICO:", err);
-                alert("ERROR AL INICIAR SESIÓN:\n" + err.message);
+                console.error(err);
+                alert("ERROR CRÍTICO: " + err.message);
             }
         };
+    } else {
+        console.error("Botón 'start-session-btn' no hallado.");
     }
 
-    // Resto de listeners... (compactados para brevedad masiva)
-    const attach = (id, evt, fn) => { const el = document.getElementById(id); if (el) el.addEventListener(evt, fn); };
-
-    attach('timer-toggle-btn', 'click', () => { pomodoro.toggle(); const btn = document.getElementById('timer-toggle-btn'); if (btn) btn.textContent = pomodoro.isActive ? 'Pausa' : 'Reanudar'; });
-    attach('timer-reset-btn', 'click', () => { if (confirm("¿Saltar?")) pomodoro.timeLeft = 0; });
-    attach('end-session-btn', 'click', () => { if (confirm("¿Finalizar?")) stopSession(); });
-    attach('private-mode-checkbox', 'change', (e) => { isPrivateMode = e.target.checked; ui.setPrivateMode(isPrivateMode); });
-    attach('view-history-btn', 'click', () => { const h = Storage.getHistory(); ui.renderHistory(h); ui.toggleHistory(true); });
-    attach('close-history-btn', 'click', () => ui.toggleHistory(false));
+    // Handlers minimalistas
+    const ev = (id, e, f) => document.getElementById(id)?.addEventListener(e, f);
+    ev('timer-toggle-btn', 'click', () => { pomodoro.toggle(); const btn = document.getElementById('timer-toggle-btn'); if (btn) btn.textContent = pomodoro.isActive ? 'Pausa' : 'Reanudar'; });
+    ev('end-session-btn', 'click', () => { if (confirm("¿Terminar?")) stopSession(); });
+    ev('private-mode-checkbox', 'change', (e) => { isPrivateMode = e.target.checked; ui.setPrivateMode(isPrivateMode); });
+    ev('view-history-btn', 'click', () => { ui.renderHistory(Storage.getHistory()); ui.toggleHistory(true); });
+    ev('close-history-btn', 'click', () => ui.toggleHistory(false));
 
     function stopSession() {
         faceAnalyzer.stop();
         clearInterval(sessionInterval);
-        const finalData = {
+        Storage.saveSession({
             subject: document.getElementById('session-subject').value,
             avgFocus: Math.round(metrics.smoothedFocus),
-            durationSeconds: sessionSeconds,
-            durationMinutes: Math.round(sessionSeconds / 60),
-            distractionSeconds: metrics.currentMetrics.cumulativeDistractionTime
-        };
-        Storage.saveSession(finalData);
-        alert("Sesión guardada. La página se reiniciará.");
+            durationMinutes: Math.round(sessionSeconds / 60)
+        });
         location.reload();
     }
 
-    // Utilidades de dibujo...
     const canvasCtx = document.getElementById('overlay-canvas').getContext('2d');
-    function drawResults(results, metrics) {
+    function drawResults(results, m) {
         if (isPrivateMode) return;
         const canvas = document.getElementById('overlay-canvas');
-        canvasCtx.save();
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
         if (results.multiFaceLandmarks) {
-            for (const landmarks of results.multiFaceLandmarks) {
-                drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, { color: 'rgba(0, 242, 255, 0.1)', lineWidth: 0.5 });
-                drawConnectors(canvasCtx, landmarks, FACEMESH_LEFT_EYE, { color: '#00f2ff', lineWidth: 1 });
-                drawConnectors(canvasCtx, landmarks, FACEMESH_RIGHT_EYE, { color: '#00f2ff', lineWidth: 1 });
-            }
+            drawConnectors(canvasCtx, results.multiFaceLandmarks[0], FACEMESH_TESSELATION, { color: 'rgba(0,242,255,0.1)', lineWidth: 0.5 });
         }
-        ui.setVisionAlert('distraction', metrics.isDistracted);
-        canvasCtx.restore();
+        ui.setVisionAlert('distraction', m.isDistracted);
     }
-
-    function drawEmptyOverlay() {
-        const canvas = document.getElementById('overlay-canvas');
-        canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
-    }
-
-    function handleAlerts(m) {
-        if (isPrivateMode) return;
-        const now = Date.now();
-        if (now - lastAlertTime < CONFIG.UI.ALERT_COOLDOWN) return;
-        if (m.isDistracted) ui.showToast("¡Concentración!", "warning");
-    }
-    let lastAlertTime = 0;
-
-    function updateAIRecommendation(m) {
-        if (isPrivateMode) return;
-        let rec = "Todo en orden.";
-        if (m.focusScore < 60) rec = "Baja concentración.";
-        ui.updateRecommendations(rec);
-    }
+    function drawEmptyOverlay() { canvasCtx.clearRect(0, 0, 640, 480); }
+    function handleAlerts(m) { if (m.isDistracted) ui.showToast("¡Vuelve aquí!", "warning"); }
 }
 
-// Ejecución segura
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', startApp);
-} else {
-    startApp();
-}
+// Arranque
+if (document.readyState === 'complete') startApp();
+else window.addEventListener('load', startApp);
