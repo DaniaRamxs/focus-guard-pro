@@ -5,24 +5,29 @@ if (typeof logDebug === 'undefined') {
     window.logDebug = (m) => console.log(m);
 }
 
-logDebug("Iniciando carga de app.js...");
+logDebug("Cargando app.js v1.2...");
+
+// Estado Global (para evitar errores de scope)
+let isPrivateMode = false;
+let sessionSeconds = 0;
+let sessionInterval = null;
+let ui = null;
+let metrics = null;
+let pomodoro = null;
+let faceAnalyzer = null;
 
 function startApp() {
     try {
-        logDebug("Ejecutando startApp()...");
+        logDebug("Iniciando startApp()...");
 
-        const ui = new UIController();
-        const metrics = new MetricsEngine();
-        const pomodoro = new PomodoroTimer(
+        ui = new UIController();
+        metrics = new MetricsEngine();
+        pomodoro = new PomodoroTimer(
             (t) => ui.updateTimer(pomodoro.formatTime(t)),
-            (m) => logDebug("Temporizador finalizado: " + m)
+            (m) => logDebug("Temporizador: " + m)
         );
 
-        let sessionSeconds = 0;
-        let sessionInterval = null;
-        let isPrivateMode = false;
-
-        const faceAnalyzer = new FaceAnalyzer((results) => {
+        faceAnalyzer = new FaceAnalyzer((results) => {
             if (isPrivateMode) return;
             if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
                 ui.setVisionAlert('no-face', true);
@@ -30,85 +35,100 @@ function startApp() {
                 return;
             }
             ui.setVisionAlert('no-face', false);
+
+            const landmarks = results.multiFaceLandmarks[0];
             const currentMetrics = metrics.update(results, {
-                ear: (FaceAnalyzer.calculateEAR(results.multiFaceLandmarks[0], CONFIG.LANDMARKS.LEFT_EYE) +
-                    FaceAnalyzer.calculateEAR(results.multiFaceLandmarks[0], CONFIG.LANDMARKS.RIGHT_EYE)) / 2,
-                pose: FaceAnalyzer.estimateHeadPose(results.multiFaceLandmarks[0]),
-                gaze: FaceAnalyzer.estimateGaze(results.multiFaceLandmarks[0], CONFIG.LANDMARKS.LEFT_EYE, CONFIG.LANDMARKS.LEFT_IRIS)
+                ear: (FaceAnalyzer.calculateEAR(landmarks, CONFIG.LANDMARKS.LEFT_EYE) +
+                    FaceAnalyzer.calculateEAR(landmarks, CONFIG.LANDMARKS.RIGHT_EYE)) / 2,
+                pose: FaceAnalyzer.estimateHeadPose(landmarks),
+                gaze: FaceAnalyzer.estimateGaze(landmarks, CONFIG.LANDMARKS.LEFT_EYE, CONFIG.LANDMARKS.LEFT_IRIS)
             });
+
             drawResults(results, currentMetrics);
             ui.updateDashboard(currentMetrics, {
                 ear: currentMetrics.blinkRate,
-                pose: FaceAnalyzer.estimateHeadPose(results.multiFaceLandmarks[0])
+                pose: FaceAnalyzer.estimateHeadPose(landmarks)
             });
             ui.setVisionAlert('sleep', currentMetrics.isSleeping);
-            handleAlerts(currentMetrics);
         });
 
-        function handleAlerts(m) {
-            if (isPrivateMode) return;
-            if (m.isDistracted) ui.showToast("¡Vuelve aquí!", "warning");
-        }
-
-        // VINCULACIÓN ULTRA-ROBUSTA
+        // VINCULACIÓN DE BOTÓN PRINCIPAL
         const startBtn = document.getElementById('start-session-btn');
         if (startBtn) {
-            logDebug("Botón de inicio vinculado.");
+            logDebug("Botón detectado. Asignando onclick...");
             startBtn.onclick = async function (e) {
                 e.preventDefault();
-                logDebug(">> CLICK DETECTADO <<");
+                logDebug(">> CLICK RECIBIDO <<");
 
-                const name = document.getElementById('user-name').value;
-                const subject = document.getElementById('session-subject').value;
+                const nameInput = document.getElementById('user-name');
+                const subjectInput = document.getElementById('session-subject');
 
-                if (!name || !subject) {
-                    alert("Por favor, completa nombre y materia.");
+                if (!nameInput.value || !subjectInput.value) {
+                    alert("⚠️ Por favor, completa tu nombre y la materia.");
                     return;
                 }
 
                 try {
-                    logDebug("Cambiando pantalla...");
+                    logDebug("Cambiando a Dashboard...");
                     ui.showScreen('dashboard-screen');
-                    document.getElementById('current-subject').textContent = `MATERIA: ${subject.toUpperCase()}`;
 
-                    logDebug("Activando audio...");
+                    const subDisplay = document.getElementById('current-subject');
+                    if (subDisplay) subDisplay.textContent = `MATERIA: ${subjectInput.value.toUpperCase()}`;
+
+                    logDebug("Iniciando Cámara/IA...");
                     ui.initAudio();
-
-                    logDebug("Solicitando cámara...");
                     await faceAnalyzer.start(document.getElementById('camera-view'));
-                    logDebug("Cámara iniciada.");
+                    logDebug("Cámara activa.");
 
                     sessionInterval = setInterval(() => {
                         sessionSeconds++;
                         ui.updateSessionClock(sessionSeconds);
                     }, 1000);
 
-                    pomodoro.start(25);
-                    logDebug("Misión en marcha.");
+                    const durationIn = document.getElementById('session-duration');
+                    const duration = durationIn ? (parseInt(durationIn.value) || 25) : 25;
+                    pomodoro.start(duration);
+
+                    logDebug("Sesión iniciada con éxito.");
                 } catch (err) {
-                    logDebug("ERROR EN START: " + err.message);
-                    alert("Error: " + err.message);
+                    logDebug("FALLA EN START: " + err.message);
+                    alert("ERROR DE CÁMARA:\n" + err.message);
                 }
             };
         } else {
-            logDebug("ERROR: No se encontró el botón start-session-btn");
+            logDebug("ALERTA: No se halló el botón start-session-btn");
         }
 
-        // Agregamos otros listeners...
-        document.getElementById('end-session-btn')?.addEventListener('click', () => location.reload());
+        // Listeners secundarios
+        const _id = (idx) => document.getElementById(idx);
+        _id('end-session-btn')?.addEventListener('click', () => {
+            if (confirm("¿Seguro que quieres salir?")) {
+                location.reload();
+            }
+        });
+
+        _id('private-mode-checkbox')?.addEventListener('change', (e) => {
+            isPrivateMode = e.target.checked;
+            ui.setPrivateMode(isPrivateMode);
+            logDebug("Modo Privado: " + isPrivateMode);
+        });
+
+        logDebug("Inicialización completa.");
 
     } catch (e) {
-        logDebug("FALTA CRÍTICA EN INICIALIZACIÓN: " + e.message);
+        logDebug("CRASH EN STARTUP: " + e.message);
+        console.error(e);
     }
 }
 
-// Arranque garantizado
+// Arranque seguro
 if (document.readyState === 'complete') {
     startApp();
 } else {
-    window.onload = startApp;
+    window.addEventListener('load', startApp);
 }
 
+// Funciones de dibujo corregidas
 const canvasCtx = document.getElementById('overlay-canvas')?.getContext('2d');
 function drawResults(results, m) {
     if (!canvasCtx || isPrivateMode) return;
@@ -116,7 +136,5 @@ function drawResults(results, m) {
     if (results.multiFaceLandmarks) {
         drawConnectors(canvasCtx, results.multiFaceLandmarks[0], FACEMESH_TESSELATION, { color: 'rgba(0,242,255,0.1)', lineWidth: 0.5 });
     }
-    ui.setVisionAlert('distraction', m.isDistracted);
 }
 function drawEmptyOverlay() { canvasCtx?.clearRect(0, 0, 640, 480); }
-
