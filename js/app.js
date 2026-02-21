@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!isValid) {
                 console.warn("Validación de formulario fallida.");
-                // alert("Por favor, llena todos los campos correctamente.");
+                alert("Por favor, completa tu nombre y selecciona una materia antes de iniciar.");
                 return;
             }
 
