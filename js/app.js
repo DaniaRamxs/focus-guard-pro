@@ -75,38 +75,53 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- Vinculación de Eventos ---
+    console.log("Binding events...");
     const startBtn = document.getElementById('start-session-btn');
     const setupForm = document.getElementById('session-setup-form');
 
     if (startBtn && setupForm) {
+        console.log("Start button and form found, adding listener.");
         startBtn.addEventListener('click', async () => {
-            console.log("Manual Start Button clicked");
+            console.log("--- BOTÓN CLICK DETECTADO ---");
+            // alert("Click en el botón"); // Muy intrusivo, pero efectivo si nada funciona
 
-            // Validación manual de campos requeridos
-            if (!setupForm.reportValidity()) {
-                console.log("Form validation failed");
+            // Validación manual
+            const isValid = setupForm.reportValidity();
+            console.log("Form validity:", isValid);
+
+            if (!isValid) {
+                console.warn("Validación de formulario fallida.");
+                // alert("Por favor, llena todos los campos correctamente.");
                 return;
             }
 
-            const name = document.getElementById('user-name').value;
-            const subject = document.getElementById('session-subject').value;
+            const nameInput = document.getElementById('user-name');
+            const subjectInput = document.getElementById('session-subject');
             const durationInput = document.getElementById('session-duration');
+
+            const name = nameInput.value;
+            const subject = subjectInput.value;
             const duration = durationInput ? (parseInt(durationInput.value) || 25) : 25;
 
-            ui.showToast(`Iniciando sesión para ${name}...`);
+            console.log("Datos capturados:", { name, subject, duration });
+            ui.showToast(`Iniciando misión para ${name}...`);
             ui.initAudio();
 
             try {
-                console.log("Starting FaceAnalyzer...");
+                console.log("Buscando elemento de video...");
                 const videoElement = document.getElementById('camera-view');
-                if (!videoElement) throw new Error("Video element (camera-view) not found");
+                if (!videoElement) {
+                    throw new Error("No se encontró el elemento 'camera-view' en el DOM.");
+                }
 
-                await faceAnalyzer.start(videoElement);
-                console.log("FaceAnalyzer started successfully");
-
+                console.log("Intentando arrancar FaceAnalyzer...");
+                // Cambiamos el orden: primero mostramos la pantalla, luego la cámara
                 ui.showScreen('dashboard-screen');
                 const subElem = document.getElementById('current-subject');
                 if (subElem) subElem.textContent = `MATERIA: ${subject.toUpperCase()}`;
+
+                await faceAnalyzer.start(videoElement);
+                console.log("FaceAnalyzer arrancó con éxito.");
 
                 sessionStartTime = Date.now();
                 sessionSeconds = 0;
@@ -119,13 +134,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 pomodoro.start(duration);
 
             } catch (err) {
-                console.error("Error during session start:", err);
-                ui.showToast("Error al acceder a la cámara o inicializar IA. Verifica los permisos.", "warning");
-                alert("SISTEMA ERROR (Cámara/IA):\n" + err.message);
+                console.error("ERROR CRÍTICO EN START:", err);
+                ui.showToast("Falla técnica al iniciar.", "warning");
+                alert("ERROR AL INICIAR SESIÓN:\n" + err.message + "\n\nTip: Asegúrate de dar permisos de cámara.");
             }
         });
     } else {
-        console.error("Critical: Start button or Setup form not found!");
+        const errorMsg = `Error Crítico: No se halló el botón (${!!startBtn}) o el formulario (${!!setupForm})`;
+        console.error(errorMsg);
+        alert(errorMsg);
     }
 
     document.getElementById('timer-toggle-btn').addEventListener('click', () => {
