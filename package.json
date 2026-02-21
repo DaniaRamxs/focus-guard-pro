@@ -2,7 +2,6 @@
     "name": "focus-guard-pro",
     "version": "1.0.0",
     "description": "Advanced vision analytics for students",
-    "type": "module",
     "scripts": {
         "dev": "vite",
         "build": "npx vite build",

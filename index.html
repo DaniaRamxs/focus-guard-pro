@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FocusGuard Pro | Analítica de Visión Avanzada</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="./style.css">
 
     <!-- Dependencias Externas -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
@@ -15,11 +15,13 @@
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <script>
-        // Rastreador de errores temprano
-        window.onerror = function (msg, url, lineNo, columnNo, error) {
-            alert(`SISTEMA ERROR:\n${msg}\nLínea: ${lineNo}\nArchivo: ${url}`);
-            return false;
-        };
+        // Rastreador de errores — solo activo en desarrollo local
+        if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+            window.onerror = function (msg, url, lineNo) {
+                console.error(`[FocusGuard] ${msg} (línea ${lineNo} en ${url})`);
+                return false;
+            };
+        }
     </script>
 </head>
 
@@ -55,7 +57,9 @@
                             <input type="number" id="session-duration" class="input-control" value="25" min="1"
                                 max="120">
                         </div>
-                        <button type="button" id="start-session-btn" class="btn-primary">Iniciar Misión</button>
+                        <button type="button" id="start-session-btn" class="btn-primary"
+                            onclick="if(window.logDebug) logDebug('Botón presionado (Inline Native)');">Iniciar
+                            Misión</button>
                     </form>
                     <div style="display: flex; justify-content: center; gap: 1rem; margin-top: 1.5rem;">
                         <button id="view-history-btn" class="glass-panel"
@@ -382,29 +386,20 @@
     </style>
 
     <!-- Módulos de Aplicación -->
-    <script src="js/config.js"></script>
-    <script src="js/storage.js"></script>
-    <script src="js/faceAnalysis.js"></script>
-    <script src="js/metrics.js"></script>
-    <script src="js/timer.js"></script>
-    <script src="js/ui.js"></script>
-    <script src="js/app.js"></script>
-
-    <!-- Consola de Diagnóstico (Solo para Debug) -->
-    <div id="debug-console"
-        style="position: fixed; bottom: 0; left: 0; width: 100%; max-height: 100px; background: rgba(0,0,0,0.8); color: #0f0; font-family: monospace; font-size: 10px; overflow-y: auto; z-index: 10000; padding: 5px; border-top: 1px solid #0f0; display: block;">
-        [SISTEMA] Esperando inicialización...
-    </div>
+    <script src="./js/config.js"></script>
+    <script src="./js/storage.js"></script>
+    <script src="./js/faceAnalysis.js"></script>
+    <script src="./js/metrics.js"></script>
+    <script src="./js/timer.js"></script>
+    <script src="./js/ui.js"></script>
+    <script src="./js/app.js"></script>
 
     <script>
+        // logDebug: solo activo en localhost para diagnóstico
         function logDebug(msg) {
-            const consoleEl = document.getElementById('debug-console');
-            if (consoleEl) {
-                const time = new Date().toLocaleTimeString();
-                consoleEl.innerHTML += `<br>[${time}] ${msg}`;
-                consoleEl.scrollTop = consoleEl.scrollHeight;
+            if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+                console.log(`[FG-Debug] ${msg}`);
             }
-            console.log(msg);
         }
         logDebug("Index.html cargado.");
     </script>
