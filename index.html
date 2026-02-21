@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FocusGuard Pro | Analítica de Visión Avanzada</title>
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Dependencias Externas -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+    <div class="app-container">
+        <main class="main-content">
+            <!-- Pantalla de Inicio -->
+            <section id="landing-screen" class="screen active">
+                <div class="logo-branding">
+                    <h1>FocusGuard Pro</h1>
+                    <p class="text-secondary">Monitoreo avanzado de enfoque y fatiga en tiempo real</p>
+                </div>
+
+                <div class="glass-panel entry-card">
+                    <form id="session-setup-form">
+                        <div class="form-group">
+                            <label for="user-name">Nombre del Estudiante</label>
+                            <input type="text" id="user-name" class="input-control" placeholder="Ej. Alex" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="session-subject">Materia / Tema</label>
+                            <select id="session-subject" class="input-control" required>
+                                <option value="" disabled selected>Selecciona una materia</option>
+                                <option value="Matemáticas">Matemáticas / Cálculo</option>
+                                <option value="Programación">Programación / CS</option>
+                                <option value="Física">Física</option>
+                                <option value="Humanidades">Humanidades / Social</option>
+                                <option value="Otro">Otro</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="session-duration">Duración del Bloque (min)</label>
+                            <input type="number" id="session-duration" class="input-control" value="25" min="1"
+                                max="120">
+                        </div>
+                        <button type="submit" class="btn-primary">Iniciar Misión</button>
+                    </form>
+                    <div style="display: flex; justify-content: center; gap: 1rem; margin-top: 1.5rem;">
+                        <button id="view-history-btn" class="glass-panel"
+                            style="padding: 0.5rem 1rem; font-size: 0.7rem; cursor: pointer; color: var(--text-secondary);">Ver
+                            Historial</button>
+                    </div>
+                    <p class="text-muted" style="font-size: 0.7rem; text-align: center; margin-top: 1.5rem;">
+                        <i data-lucide="shield-check" style="width: 12px; height: 12px; vertical-align: middle;"></i>
+                        Privacidad Garantizada: El procesamiento de video es 100% local.
+                    </p>
+                </div>
+            </section>
+
+            <!-- Pantalla del Dashboard Principal -->
+            <section id="dashboard-screen" class="screen">
+                <div class="dashboard">
+                    <header class="dash-header">
+                        <div class="dash-identity">
+                            <h2 class="font-orbitron" style="font-size: 1.2rem; color: var(--accent-primary);">
+                                FocusGuard <span style="font-weight: 300; color: var(--text-muted);">// Panel</span>
+                            </h2>
+                        </div>
+                        <div class="dash-meta text-secondary font-mono" style="font-size: 0.8rem;">
+                            <span id="current-subject">MATERIA: ---</span> |
+                            <span id="session-timer">00:00:00</span>
+                        </div>
+                        <div class="dash-actions" style="display: flex; gap: 0.5rem; align-items: center;">
+                            <div class="private-mode-toggle"
+                                style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.7rem; margin-right: 1rem;">
+                                <label class="switch">
+                                    <input type="checkbox" id="private-mode-checkbox">
+                                    <span class="slider round"></span>
+                                </label>
+                                <span>MODO PRIVADO</span>
+                            </div>
+                            <button id="end-session-btn" class="glass-panel"
+                                style="padding: 0.5rem 1rem; color: var(--danger); border: 1px solid var(--danger); cursor: pointer; text-transform: uppercase; font-size: 0.7rem;">Finalizar</button>
+                        </div>
+                    </header>
+
+                    <!-- Columna Izquierda: Visión y Controles -->
+                    <aside class="dash-sidebar-left">
+                        <div class="glass-panel video-container" style="box-shadow: 0 0 20px rgba(0,0,0,0.5);">
+                            <div id="private-mode-overlay"
+                                style="position: absolute; top:0; left:0; width:100%; height:100%; background: var(--surface-bg); display:none; flex-direction:column; align-items:center; justify-content:center; z-index: 5;">
+                                <i data-lucide="eye-off"
+                                    style="width: 48px; height: 48px; color: var(--text-muted); margin-bottom: 1rem;"></i>
+                                <span class="font-orbitron" style="font-size: 0.7rem;">MODO PRIVADO ACTIVO</span>
+                                <span style="font-size: 0.6rem; color: var(--text-muted); margin-top: 0.5rem;">Cámara
+                                    pausada para tu privacidad</span>
+                            </div>
+
+                            <!-- Alertas de Visión (No espejadas) -->
+                            <div id="vision-alerts"
+                                style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 6; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                                <div id="alert-distraction" class="font-orbitron"
+                                    style="display: none; color: #ef4444; border: 2px solid #ef4444; padding: 0.5rem 1rem; background: rgba(239, 68, 68, 0.1); box-shadow: 0 0 15px rgba(239, 68, 68, 0.3); margin-top: 20px;">
+                                    DISTRACCIÓN DETECTADA</div>
+                                <div id="alert-no-face" class="font-orbitron"
+                                    style="display: none; color: #ef4444; background: rgba(239, 68, 68, 0.1); padding: 1rem; border-radius: 4px;">
+                                    ROSTRO NO DETECTADO</div>
+                                <div id="alert-sleep" class="font-orbitron"
+                                    style="display: none; color: #ffffff; background: #ef4444; padding: 2rem; border-radius: 8px; box-shadow: 0 0 30px #ef4444; font-size: 1.5rem; text-align: center; border: 4px solid #ffffff;">
+                                    ¡DESPIERTA!<br>ESTÁS DURMIENDO</div>
+                            </div>
+                            <video id="camera-view" playsinline></video>
+                            <canvas id="overlay-canvas"></canvas>
+                            <div class="video-overlay-info"
+                                style="position: absolute; bottom: 10px; left: 10px; font-size: 0.6rem; color: var(--accent-primary); pointer-events: none;">
+                                TRANSMISIÓN DE DATOS EN VIVO [OK]
+                            </div>
+                        </div>
+
+                        <div class="glass-panel metric-card">
+                            <span class="metric-label">Estabilidad de Postura</span>
+                            <div class="metric-value font-mono" id="val-posture">--%</div>
+                            <div class="progress-bar-bg"
+                                style="height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px;">
+                                <div id="bar-posture" class="progress-bar-fill"
+                                    style="width: 0%; height: 100%; background: var(--accent-primary); transition: width 0.3s;">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="glass-panel metric-card">
+                            <span class="metric-label">Temporizador Pomodoro</span>
+                            <div class="metric-value font-mono" id="pomodoro-display"
+                                style="color: var(--accent-secondary);">25:00</div>
+                            <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                                <button id="timer-toggle-btn" class="btn-primary"
+                                    style="padding: 0.4rem; font-size: 0.7rem;">Pausa</button>
+                                <button id="timer-reset-btn" class="glass-panel"
+                                    style="padding: 0.4rem; font-size: 0.7rem; flex: 1;">Saltar</button>
+                            </div>
+                        </div>
+                    </aside>
+
+                    <!-- Columna Central: Métricas Principales -->
+                    <section class="dash-main">
+                        <div class="glass-panel"
+                            style="height: 100%; padding: 2rem; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
+                            <div class="focus-gauge-container" style="position: relative; width: 300px; height: 300px;">
+                                <svg width="300" height="300" viewBox="0 0 100 100">
+                                    <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.05)"
+                                        stroke-width="8"></circle>
+                                    <circle id="focus-gauge-fill" cx="50" cy="50" r="45" fill="none"
+                                        stroke="var(--accent-primary)" stroke-width="8" stroke-dasharray="282.7"
+                                        stroke-dashoffset="282.7" stroke-linecap="round" transform="rotate(-90 50 50)"
+                                        style="transition: stroke-dashoffset 0.5s ease-out;"></circle>
+                                    <text id="val-focus-score" x="50" y="50" text-anchor="middle"
+                                        dominant-baseline="middle" font-family="Orbitron" font-size="20"
+                                        fill="var(--text-primary)">0</text>
+                                    <text x="50" y="65" text-anchor="middle" dominant-baseline="middle"
+                                        font-family="Overpass" font-size="6" fill="var(--text-secondary)">PUNTAJE DE
+                                        ENFOQUE</text>
+                                </svg>
+                            </div>
+
+                            <div class="real-time-stats"
+                                style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; width: 100%; margin-top: 2rem;">
+                                <div>
+                                    <span class="metric-label">Índice de Fatiga</span>
+                                    <div class="metric-value font-mono" id="val-fatigue" style="color: var(--warning);">
+                                        --</div>
+                                </div>
+                                <div>
+                                    <span class="metric-label">Tasa de Parpadeo</span>
+                                    <div class="metric-value font-mono" id="val-blinks">--<span
+                                            style="font-size: 0.8rem; color: var(--text-muted);">/min</span></div>
+                                </div>
+                            </div>
+
+                            <div id="ai-recommendation" class="glass-panel-violet"
+                                style="margin-top: 2.5rem; padding: 1rem; width: 100%; border-radius: var(--border-radius-md); background: rgba(139, 92, 246, 0.1);">
+                                <h4 class="font-orbitron"
+                                    style="font-size: 0.7rem; color: var(--accent-secondary); margin-bottom: 0.5rem;">
+                                    PERSPECTIVA IA</h4>
+                                <p id="rec-text" style="font-size: 0.85rem;">Analizando comportamiento inicial...</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Columna Derecha: Gráficos de Analítica -->
+                    <aside class="dash-sidebar-right">
+                        <div class="glass-panel metric-card">
+                            <span class="metric-label">Tendencia de Enfoque (1m)</span>
+                            <div class="chart-item">
+                                <canvas id="focus-chart"></canvas>
+                            </div>
+                        </div>
+                        <div class="glass-panel metric-card">
+                            <span class="metric-label">Historial de Parpadeo</span>
+                            <div class="chart-item">
+                                <canvas id="blink-chart"></canvas>
+                            </div>
+                        </div>
+                        <div class="glass-panel metric-card">
+                            <span class="metric-label">Distracciones Acumuladas</span>
+                            <div class="metric-value font-mono" id="val-distractions" style="font-size: 1.5rem;">0<span
+                                    style="font-size: 0.7rem; color: var(--text-muted);">s</span></div>
+                            <div style="font-size: 0.6rem; color: var(--text-muted);">TIEMPO TOTAL FUERA DE PANTALLA
+                            </div>
+                        </div>
+                        <div class="glass-panel metric-card">
+                            <span class="metric-label">Ángulos de Cabeza</span>
+                            <div class="chart-item">
+                                <canvas id="pose-chart"></canvas>
+                            </div>
+                        </div>
+                    </aside>
+
+                    <footer class="dash-footer"
+                        style="grid-column: 1 / -1; font-size: 0.6rem; color: var(--text-muted); text-align: center; padding: 0.5rem;">
+                        VERSIÓN DEL SISTEMA: 1.1.0-PRO | MÓDULO: ANALÍTICA_VISIÓN | ESTADO: OPERATIVO
+                    </footer>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modales y Notificaciones -->
+    <div id="notification-toast" class="glass-panel"
+        style="position: fixed; top: 20px; right: 20px; padding: 1rem 1.5rem; display: none; z-index: 9999; animation: slideInRight 0.3s ease-out; border-left: 4px solid var(--accent-primary);">
+        <p id="notif-message">Mensaje del sistema</p>
+    </div>
+
+    <div id="history-modal" class="modal-overlay" style="display: none;">
+        <div class="glass-panel modal-content">
+            <header class="modal-header">
+                <h3 class="font-orbitron">Historial de Sesiones</h3>
+                <button id="close-history-btn" class="close-btn">&times;</button>
+            </header>
+            <div id="history-list" class="history-list">
+                <!-- Se llenará dinámicamente -->
+            </div>
+        </div>
+    </div>
+
+    <style>
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 0 30px rgba(0, 242, 255, 0.2);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 1rem;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            font-size: 2rem;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .history-list {
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .history-item {
+            padding: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        /* Switch Toggle */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 34px;
+            height: 20px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.1);
+            transition: .4s;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+        }
+
+        input:checked+.slider {
+            background-color: var(--accent-primary);
+        }
+
+        input:checked+.slider:before {
+            transform: translateX(14px);
+        }
+
+        .slider.round {
+            border-radius: 34px;
+        }
+
+        .slider.round:before {
+            border-radius: 50%;
+        }
+    </style>
+
+    <!-- Módulos de Aplicación -->
+    <script src="js/config.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/faceAnalysis.js"></script>
+    <script src="js/metrics.js"></script>
+    <script src="js/timer.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/app.js"></script>
+
+    <script>
+        // Inicializar iconos
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>
