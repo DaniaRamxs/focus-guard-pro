@@ -390,6 +390,25 @@
     <script src="js/ui.js"></script>
     <script src="js/app.js"></script>
 
+    <!-- Consola de Diagnóstico (Solo para Debug) -->
+    <div id="debug-console"
+        style="position: fixed; bottom: 0; left: 0; width: 100%; max-height: 100px; background: rgba(0,0,0,0.8); color: #0f0; font-family: monospace; font-size: 10px; overflow-y: auto; z-index: 10000; padding: 5px; border-top: 1px solid #0f0; display: block;">
+        [SISTEMA] Esperando inicialización...
+    </div>
+
+    <script>
+        function logDebug(msg) {
+            const consoleEl = document.getElementById('debug-console');
+            if (consoleEl) {
+                const time = new Date().toLocaleTimeString();
+                consoleEl.innerHTML += `<br>[${time}] ${msg}`;
+                consoleEl.scrollTop = consoleEl.scrollHeight;
+            }
+            console.log(msg);
+        }
+        logDebug("Index.html cargado.");
+    </script>
+
     <script>
         // Inicializar iconos
         lucide.createIcons();
