@@ -6,7 +6,6 @@ class UIController {
         this.charts = {};
         this.initCharts();
 
-        // Elementos DOM
         this.elements = {
             landingScreen: document.getElementById('landing-screen'),
             dashboardScreen: document.getElementById('dashboard-screen'),
@@ -32,11 +31,24 @@ class UIController {
 
         this.audioCtx = null;
         this.alarmOsc = null;
+        this.alarmGain = null;
+
+        // Timestamp para actualización de blink chart cada 5 segundos
+        this._lastBlinkUpdate = 0;
+        this._toastTimeout = null;
     }
 
     initAudio() {
         if (this.audioCtx) return;
         this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+
+    closeAudio() {
+        this.stopAlarm();
+        if (this.audioCtx) {
+            this.audioCtx.close();
+            this.audioCtx = null;
+        }
     }
 
     async startAlarm() {
@@ -46,20 +58,16 @@ class UIController {
 
         this.alarmOsc = this.audioCtx.createOscillator();
         this.alarmGain = this.audioCtx.createGain();
-
         this.alarmOsc.type = 'sawtooth';
         this.alarmOsc.frequency.setValueAtTime(880, this.audioCtx.currentTime);
 
-        // Crear efecto de pitido (beeping)
         const now = this.audioCtx.currentTime;
         this.alarmGain.gain.setValueAtTime(0, now);
-
-        // Oscilación de volumen: 0.2s encendido, 0.2s apagado
         const beepInterval = 0.4;
-        for (let i = 0; i < 100; i++) {
-            const startTime = now + (i * beepInterval);
-            this.alarmGain.gain.setValueAtTime(0.2, startTime);
-            this.alarmGain.gain.setValueAtTime(0, startTime + 0.2);
+        for (let i = 0; i < 60; i++) {
+            const t = now + i * beepInterval;
+            this.alarmGain.gain.setValueAtTime(0.2, t);
+            this.alarmGain.gain.setValueAtTime(0, t + 0.2);
         }
 
         this.alarmOsc.connect(this.alarmGain);
@@ -91,31 +99,36 @@ class UIController {
     }
 
     initCharts() {
-        const chartOptions = {
+        const baseOptions = {
             responsive: true,
             maintainAspectRatio: false,
-            scales: {
-                y: { display: false },
-                x: { display: false }
-            },
+            scales: { y: { display: false }, x: { display: false } },
             plugins: { legend: { display: false } },
-            elements: {
-                line: { tension: 0.4, borderWidth: 2, borderColor: '#00f2ff' },
-                point: { radius: 0 }
-            },
+            elements: { line: { tension: 0.4, borderWidth: 2 }, point: { radius: 0 } },
             animation: false
         };
 
         this.charts.focus = new Chart(document.getElementById('focus-chart'), {
             type: 'line',
-            data: { labels: Array(30).fill(''), datasets: [{ data: Array(30).fill(0), borderColor: '#00f2ff', fill: true, backgroundColor: 'rgba(0, 242, 255, 0.1)' }] },
-            options: chartOptions
+            data: {
+                labels: Array(30).fill(''),
+                datasets: [{
+                    data: Array(30).fill(0),
+                    borderColor: '#00f2ff',
+                    fill: true,
+                    backgroundColor: 'rgba(0, 242, 255, 0.08)'
+                }]
+            },
+            options: baseOptions
         });
 
         this.charts.blink = new Chart(document.getElementById('blink-chart'), {
             type: 'bar',
-            data: { labels: Array(10).fill(''), datasets: [{ data: Array(10).fill(0), backgroundColor: '#8b5cf6' }] },
-            options: chartOptions
+            data: {
+                labels: Array(10).fill(''),
+                datasets: [{ data: Array(10).fill(0), backgroundColor: '#8b5cf6' }]
+            },
+            options: baseOptions
         });
 
         this.charts.pose = new Chart(document.getElementById('pose-chart'), {
@@ -123,43 +136,75 @@ class UIController {
             data: {
                 labels: Array(30).fill(''),
                 datasets: [
-                    { data: Array(30).fill(0), borderColor: '#00f2ff' },
-                    { data: Array(30).fill(0), borderColor: '#8b5cf6' }
+                    { data: Array(30).fill(0), borderColor: '#00f2ff', label: 'Pitch' },
+                    { data: Array(30).fill(0), borderColor: '#8b5cf6', label: 'Yaw' }
                 ]
             },
-            options: chartOptions
+            options: baseOptions
         });
     }
 
     updateDashboard(metrics, faceData) {
-        // Métricas de texto
         this.elements.focusScore.textContent = metrics.focusScore;
         this.elements.fatigueVal.textContent = metrics.fatigueIndex;
         this.elements.blinkRateVal.textContent = metrics.blinkRate;
         this.elements.postureVal.textContent = `${metrics.postureStability}%`;
-        this.elements.distractionsVal.innerHTML = `${metrics.cumulativeDistractionTime}<span style="font-size: 0.7rem; color: var(--text-muted);">s</span>`;
+        this.elements.distractionsVal.innerHTML =
+            `${metrics.cumulativeDistractionTime}<span style="font-size: 0.7rem; color: var(--text-muted);">s</span>`;
 
-        // Gauge de Focus
+        // Color dinámico del gauge según nivel de enfoque
+        const gaugeColor = metrics.focusScore >= 75 ? 'var(--accent-primary)'
+            : metrics.focusScore >= 50 ? 'var(--warning)'
+            : 'var(--danger)';
+        this.elements.focusGauge.style.stroke = gaugeColor;
         const offset = 282.7 - (metrics.focusScore / 100 * 282.7);
         this.elements.focusGauge.style.strokeDashoffset = offset;
 
-        // Barra de postura
+        // Barra de postura con color dinámico
         this.elements.postureBar.style.width = `${metrics.postureStability}%`;
-        this.elements.postureBar.style.backgroundColor = metrics.postureStability < 70 ? 'var(--warning)' : 'var(--accent-primary)';
+        this.elements.postureBar.style.backgroundColor =
+            metrics.postureStability < 50 ? 'var(--danger)'
+            : metrics.postureStability < 70 ? 'var(--warning)'
+            : 'var(--accent-primary)';
 
-        // Actualizar gráficas
+        // Gráficas
         this.updateChartData(this.charts.focus, metrics.focusScore);
-        this.updateChartData(this.charts.pose, faceData.pose.pitch, 0);
-        this.updateChartData(this.charts.pose, faceData.pose.yaw, 1);
+        if (faceData.pose) {
+            this.updateChartData(this.charts.pose, faceData.pose.pitch, 0);
+            this.updateChartData(this.charts.pose, faceData.pose.yaw, 1);
+        }
 
-        // Blink chart
-        if (Math.random() > 0.95) this.updateChartData(this.charts.blink, metrics.blinkRate);
+        // Blink chart: actualización cada 5 segundos (no aleatoria)
+        const now = Date.now();
+        if (now - this._lastBlinkUpdate > 5000) {
+            this.updateChartData(this.charts.blink, metrics.blinkRate);
+            this._lastBlinkUpdate = now;
+        }
     }
 
     updateChartData(chart, newValue, datasetIndex = 0) {
         chart.data.datasets[datasetIndex].data.push(newValue);
         chart.data.datasets[datasetIndex].data.shift();
         chart.update('none');
+    }
+
+    /**
+     * Actualiza el display visual del Pomodoro según el modo actual
+     */
+    updatePomodoroMode(mode) {
+        const display = this.elements.timerDisplay;
+        const toggleBtn = document.getElementById('timer-toggle-btn');
+        const skipBtn = document.getElementById('timer-reset-btn');
+
+        if (mode === 'BREAK') {
+            display.style.color = 'var(--success)';
+            if (toggleBtn) toggleBtn.textContent = 'Pausa';
+            if (skipBtn) skipBtn.textContent = 'Saltar descanso';
+        } else {
+            display.style.color = 'var(--accent-secondary)';
+            if (toggleBtn) toggleBtn.textContent = 'Pausa';
+            if (skipBtn) skipBtn.textContent = 'Saltar';
+        }
     }
 
     showScreen(screenId) {
@@ -169,13 +214,17 @@ class UIController {
     }
 
     showToast(message, type = 'info') {
+        clearTimeout(this._toastTimeout);
         this.elements.toastMsg.textContent = message;
         this.elements.toast.style.display = 'block';
-        this.elements.toast.style.borderLeftColor = type === 'warning' ? 'var(--warning)' : 'var(--accent-primary)';
+        this.elements.toast.style.borderLeftColor =
+            type === 'warning' ? 'var(--warning)'
+            : type === 'danger' ? 'var(--danger)'
+            : 'var(--accent-primary)';
 
-        setTimeout(() => {
+        this._toastTimeout = setTimeout(() => {
             if (this.elements.toast) this.elements.toast.style.display = 'none';
-        }, 3000);
+        }, 3500);
     }
 
     updateTimer(formattedTime) {
@@ -200,26 +249,35 @@ class UIController {
 
     renderHistory(history) {
         if (!history || history.length === 0) {
-            this.elements.historyList.innerHTML = '<p style="text-align:center; padding: 2rem; color: var(--text-muted);">No hay sesiones guardadas.</p>';
+            this.elements.historyList.innerHTML =
+                '<p style="text-align:center; padding: 2rem; color: var(--text-muted);">No hay sesiones guardadas.</p>';
             return;
         }
 
-        this.elements.historyList.innerHTML = history.reverse().map(s => `
+        // Usar spread para NO mutar el array original
+        this.elements.historyList.innerHTML = [...history].reverse().map(s => {
+            const focusColor = s.avgFocus >= 75 ? 'var(--accent-primary)'
+                : s.avgFocus >= 50 ? 'var(--warning)'
+                : 'var(--danger)';
+            return `
             <div class="history-item">
                 <div>
                     <div style="font-weight:bold; color: var(--accent-primary);">${s.subject}</div>
-                    <div style="font-size: 0.7rem; color: var(--text-muted);">${new Date(s.timestamp).toLocaleDateString()} ${new Date(s.timestamp).toLocaleTimeString()}</div>
+                    <div style="font-size: 0.7rem; color: var(--text-muted);">
+                        ${new Date(s.timestamp).toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' })}
+                        &nbsp;${new Date(s.timestamp).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                    </div>
                 </div>
                 <div style="text-align:right;">
-                    <div class="font-mono" style="font-size: 1.2rem;">${s.avgFocus}%</div>
+                    <div class="font-mono" style="font-size: 1.2rem; color: ${focusColor};">${s.avgFocus}%</div>
                     <div style="font-size: 0.6rem; color: var(--text-muted);">ENFOQUE</div>
                 </div>
                 <div style="text-align:right;">
                     <div class="font-mono">${s.durationMinutes}m</div>
                     <div style="font-size: 0.6rem; color: var(--text-muted);">DURACIÓN</div>
                 </div>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
     }
 
     toggleHistory(show) {

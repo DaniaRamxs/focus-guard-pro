@@ -6,16 +6,30 @@ class PomodoroTimer {
         this.onTick = onTick;
         this.onComplete = onComplete;
 
-        this.timeLeft = 25 * 60;
+        this.workDuration = 25 * 60;   // guardado para reset y ciclos
+        this.breakDuration = 5 * 60;
+        this.timeLeft = this.workDuration;
         this.isActive = false;
         this.interval = null;
-        this.mode = 'WORK'; // WORK, BREAK
+        this.mode = 'WORK';
     }
 
     start(minutes) {
-        this.timeLeft = minutes * 60;
+        clearInterval(this.interval);
+        this.workDuration = minutes * 60;
+        // Descanso = 1/5 del tiempo de trabajo, mínimo 5 min (regla Pomodoro)
+        this.breakDuration = Math.max(5, Math.round(minutes / 5)) * 60;
+        this.timeLeft = this.workDuration;
         this.isActive = true;
         this.mode = 'WORK';
+        this.run();
+    }
+
+    startBreak() {
+        clearInterval(this.interval);
+        this.timeLeft = this.breakDuration;
+        this.isActive = true;
+        this.mode = 'BREAK';
         this.run();
     }
 
@@ -28,10 +42,23 @@ class PomodoroTimer {
         }
     }
 
+    /**
+     * Salta el bloque actual y dispara onComplete para cambiar de modo
+     */
+    skip() {
+        clearInterval(this.interval);
+        this.isActive = false;
+        this.onComplete(this.mode);
+    }
+
+    /**
+     * Reinicia el bloque actual sin cambiar de modo
+     */
     reset() {
         clearInterval(this.interval);
         this.isActive = false;
-        this.onTick(this.timeLeft);
+        this.timeLeft = this.mode === 'WORK' ? this.workDuration : this.breakDuration;
+        this.onTick(this.timeLeft, this.mode);
     }
 
     run() {
